@@ -1,21 +1,31 @@
+import mongoose, { Connection } from "mongoose";
 
-import mongoose, { MongooseOptions } from 'mongoose';
+const MONGODB_URI = process.env.MONGODB_URI;
 
-async function dbConnect(){
-  if (mongoose.connection.readyState === 0) {
-    const mongoURI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  throw new Error("Missing MONGODB_URI in environment variables");
+}
 
-    if (!mongoURI) {
-      throw new Error('Please define the MONGODB_URI environment variable.');
-    }
+type MongooseCache = {
+  conn: Connection | null;
+  promise: Promise<Connection> | null;
+};
 
-    const mongooseOpts = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    } as MongooseOptions;
+declare global {
+  // eslint-disable-next-line no-var
+  var mongooseCache: MongooseCache | undefined;
+}
 
-    await mongoose.connect(mongoURI, mongooseOpts);
+const globalCache = global.mongooseCache ?? { conn: null, promise: null };
+global.mongooseCache = globalCache;
+
+export default async function dbConnect(): Promise<Connection> {
+  if (globalCache.conn) return globalCache.conn;
+
+  if (!globalCache.promise) {
+    globalCache.promise = mongoose.connect(MONGODB_URI).then((m) => m.connection);
   }
 
-  return mongoose.connection;
+  globalCache.conn = await globalCache.promise;
+  return globalCache.conn;
 }
